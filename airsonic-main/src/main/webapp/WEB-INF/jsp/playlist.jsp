@@ -9,6 +9,8 @@
         var playlistId = ${model.playlist.id};
         var songs = [];
 
+        let previousSortingOrder = { "col": 0, "dir": "asc", "indexes": [] };
+
         function init() {
             var ratingOnImage = "<spring:theme code='ratingOnImage'/>";
             var ratingOffImage = "<spring:theme code='ratingOffImage'/>";
@@ -20,7 +22,9 @@
                 stateDuration: 60 * 60 * 24 * 365,
                 ordering: true,
                 order: [],
+              <c:if test="${!model.editAllowed}">
                 orderFixed: [ 0, 'asc' ],
+              </c:if>
                 orderMulti: false,
                 pageLength: ${model.initialPaginationSize},
               <c:set var="paginationaddition" value="${fn:contains(' 10 20 50 100 -1', ' '.concat(model.initialPaginationSize)) ? '' : ', '.concat(model.initialPaginationSize)}" />
@@ -44,7 +48,14 @@
                     callback({data: songs});
                 },
                 stripeClasses: ["bgcolor2", "bgcolor1"],
+              <c:choose>
+                <c:when test="${model.editAllowed}">
+                columnDefs: [{ targets: "_all", orderable: true }],
+                </c:when>
+                <c:otherwise>
                 columnDefs: [{ targets: "_all", orderable: false }],
+                </c:otherwise>
+              </c:choose>
                 columns: [
                     { data: "seq", className: "detail fit", visible: true },
                     { data: "starred",
@@ -285,6 +296,16 @@
                     playlistMusicTable.one( "draw", function () {
                         onRearrange(playlistMusicTable.rows().indexes().toArray());
                     });
+                    playlistMusicTable.order([0, "asc"]);
+                }
+            });
+            playlistMusicTable.on("order", (e, settings, ordArr) => {
+                if (previousSortingOrder.col !== ordArr[0].col || previousSortingOrder.dir !== ordArr[0].dir) {
+                    playlistMusicTable.order([ordArr[0].col, ordArr[0].dir]);
+                    playlistMusicTable.one( "draw", function () {
+                        onRearrange(playlistMusicTable.rows().indexes().toArray());
+                    });
+                    previousSortingOrder = { "col": ordArr[0].col, "dir": ordArr[0].dir };
                 }
             });
 
