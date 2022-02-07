@@ -50,7 +50,7 @@ import java.util.stream.IntStream;
 public class MediaFileDao extends AbstractDao {
     private static final Logger LOG = LoggerFactory.getLogger(MediaFileDao.class);
     private static final String INSERT_COLUMNS = "path, folder_id, type, format, title, album, artist, album_artist, disc_number, " +
-                                                "track_number, year, genre, bit_rate, variable_bit_rate, duration, file_size, width, height, cover_art_path, " +
+                                                "track_number, year, genre, bit_rate, variable_bit_rate, duration, file_size, width, height, " +
                                                 "parent_path, play_count, last_played, comment, created, changed, last_scanned, children_last_updated, present, " +
                                                 "version, mb_release_id, mb_recording_id";
 
@@ -145,7 +145,6 @@ public class MediaFileDao extends AbstractDao {
                     "file_size=:fs," +
                     "width=:w," +
                     "height=:h," +
-                    "cover_art_path=:cap," +
                     "parent_path=:pp," +
                     "play_count=:pc," +
                     "last_played=:lp," +
@@ -176,7 +175,6 @@ public class MediaFileDao extends AbstractDao {
                     "file_size=:fs," +
                     "width=:w," +
                     "height=:h," +
-                    "cover_art_path=:cap," +
                     "parent_path=:pp," +
                     "play_count=:pc," +
                     "last_played=:lp," +
@@ -212,7 +210,6 @@ public class MediaFileDao extends AbstractDao {
         args.put("fs", file.getFileSize());
         args.put("w", file.getWidth());
         args.put("h", file.getHeight());
-        args.put("cap", file.getCoverArtPath());
         args.put("pp", file.getParentPath());
         args.put("pc", file.getPlayCount());
         args.put("lp", file.getLastPlayed());
@@ -235,7 +232,7 @@ public class MediaFileDao extends AbstractDao {
                    file.getPath(), file.getFolderId(), file.getMediaType().name(), file.getFormat(), file.getTitle(), file.getAlbumName(), file.getArtist(),
                    file.getAlbumArtist(), file.getDiscNumber(), file.getTrackNumber(), file.getYear(), file.getGenre(), file.getBitRate(),
                    file.isVariableBitRate(), file.getDuration(), file.getFileSize(), file.getWidth(), file.getHeight(),
-                   file.getCoverArtPath(), file.getParentPath(), file.getPlayCount(), file.getLastPlayed(), file.getComment(),
+                   file.getParentPath(), file.getPlayCount(), file.getLastPlayed(), file.getComment(),
                    file.getCreated(), file.getChanged(), file.getLastScanned(),
                    file.getChildrenLastUpdated(), file.isPresent(), VERSION, file.getMusicBrainzReleaseId(), file.getMusicBrainzRecordingId());
         }
@@ -724,20 +721,19 @@ public class MediaFileDao extends AbstractDao {
         return queryForInstant("select created from starred_media_file where media_file_id=? and username=?", null, id, username);
     }
 
-    public boolean markPresent(String path, Instant lastScanned) {
-        return markPresent(Collections.singletonList(path), lastScanned);
-    }
-
-    public boolean markPresent(Collection<String> paths, Instant lastScanned) {
+    public boolean markPresent(Map<Integer, Set<String>> paths, Instant lastScanned) {
         if (!paths.isEmpty()) {
-            int batches = (paths.size() - 1) / 30000;
-            List<String> pList = new ArrayList<>(paths);
-            return IntStream.rangeClosed(0, batches).parallel().map(b -> {
-                List<String> batch = pList.subList(b * 30000, Math.min(paths.size(), b * 30000 + 30000));
-                return namedUpdate(
-                        "update media_file set present=true, last_scanned = :lastScanned where path in (:paths)",
-                        ImmutableMap.of("lastScanned", lastScanned, "paths", batch));
-            }).sum() == paths.size();
+            return paths.entrySet().parallelStream().map(e -> {
+                int batches = (e.getValue().size() - 1) / 30000;
+                List<String> pList = new ArrayList<>(e.getValue());
+
+                return IntStream.rangeClosed(0, batches).parallel().map(b -> {
+                    List<String> batch = pList.subList(b * 30000, Math.min(e.getValue().size(), b * 30000 + 30000));
+                    return namedUpdate(
+                            "update media_file set present=true, last_scanned = :lastScanned where path in (:paths) and folder_id=:folderId",
+                            ImmutableMap.of("lastScanned", lastScanned, "paths", batch, "folderId", e.getKey()));
+                }).sum() == e.getValue().size();
+            }).reduce(true, (a, b) -> a && b);
         }
 
         return true;
@@ -774,38 +770,37 @@ public class MediaFileDao extends AbstractDao {
         @Override
         public MediaFile mapRow(ResultSet rs, int rowNum) throws SQLException {
             return new MediaFile(
-                    rs.getInt(1),
-                    rs.getString(2),
-                    rs.getInt(3),
-                    MediaFile.MediaType.valueOf(rs.getString(4)),
-                    rs.getString(5),
-                    rs.getString(6),
-                    rs.getString(7),
-                    rs.getString(8),
-                    rs.getString(9),
-                    rs.getInt(10) == 0 ? null : rs.getInt(10),
-                    rs.getInt(11) == 0 ? null : rs.getInt(11),
-                    rs.getInt(12) == 0 ? null : rs.getInt(12),
-                    rs.getString(13),
-                    rs.getInt(14) == 0 ? null : rs.getInt(14),
-                    rs.getBoolean(15),
-                    rs.getDouble(16),
-                    rs.getLong(17) == 0 ? null : rs.getLong(17),
-                    rs.getInt(18) == 0 ? null : rs.getInt(18),
-                    rs.getInt(19) == 0 ? null : rs.getInt(19),
-                    rs.getString(20),
-                    rs.getString(21),
-                    rs.getInt(22),
-                    Optional.ofNullable(rs.getTimestamp(23)).map(x -> x.toInstant()).orElse(null),
-                    rs.getString(24),
-                    Optional.ofNullable(rs.getTimestamp(25)).map(x -> x.toInstant()).orElse(null),
-                    Optional.ofNullable(rs.getTimestamp(26)).map(x -> x.toInstant()).orElse(null),
-                    Optional.ofNullable(rs.getTimestamp(27)).map(x -> x.toInstant()).orElse(null),
-                    Optional.ofNullable(rs.getTimestamp(28)).map(x -> x.toInstant()).orElse(null),
-                    rs.getBoolean(29),
-                    rs.getInt(30),
-                    rs.getString(31),
-                    rs.getString(32));
+                    rs.getInt("id"),
+                    rs.getString("path"),
+                    rs.getInt("folder_id"),
+                    MediaFile.MediaType.valueOf(rs.getString("type")),
+                    rs.getString("format"),
+                    rs.getString("title"),
+                    rs.getString("album"),
+                    rs.getString("artist"),
+                    rs.getString("album_artist"),
+                    rs.getInt("disc_number") == 0 ? null : rs.getInt("disc_number"),
+                    rs.getInt("track_number") == 0 ? null : rs.getInt("track_number"),
+                    rs.getInt("year") == 0 ? null : rs.getInt("year"),
+                    rs.getString("genre"),
+                    rs.getInt("bit_rate") == 0 ? null : rs.getInt("bit_rate"),
+                    rs.getBoolean("variable_bit_rate"),
+                    rs.getDouble("duration"),
+                    rs.getLong("file_size") == 0 ? null : rs.getLong("file_size"),
+                    rs.getInt("width") == 0 ? null : rs.getInt("width"),
+                    rs.getInt("height") == 0 ? null : rs.getInt("height"),
+                    rs.getString("parent_path"),
+                    rs.getInt("play_count"),
+                    Optional.ofNullable(rs.getTimestamp("last_played")).map(x -> x.toInstant()).orElse(null),
+                    rs.getString("comment"),
+                    Optional.ofNullable(rs.getTimestamp("created")).map(x -> x.toInstant()).orElse(null),
+                    Optional.ofNullable(rs.getTimestamp("changed")).map(x -> x.toInstant()).orElse(null),
+                    Optional.ofNullable(rs.getTimestamp("last_scanned")).map(x -> x.toInstant()).orElse(null),
+                    Optional.ofNullable(rs.getTimestamp("children_last_updated")).map(x -> x.toInstant()).orElse(null),
+                    rs.getBoolean("present"),
+                    rs.getInt("version"),
+                    rs.getString("mb_release_id"),
+                    rs.getString("mb_recording_id"));
         }
     }
 

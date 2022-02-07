@@ -64,6 +64,7 @@ public class UserSettings {
     private boolean autoBookmark = true;
     private int videoBookmarkFrequency = 40;
     private int audioBookmarkFrequency = 10;
+    private int searchCount = 25;
 
     public UserSettings() {
     }
@@ -362,11 +363,20 @@ public class UserSettings {
         this.audioBookmarkFrequency = audioBookmarkFrequency;
     }
 
+    public int getSearchCount() {
+        return searchCount;
+    }
+
+    public void setSearchCount(int searchCount) {
+        this.searchCount = searchCount;
+    }
+
     /**
      * Configuration of what information to display about a song.
      */
     public static class Visibility {
         private boolean trackNumberVisible;
+        private boolean discNumberVisible;
         private boolean artistVisible = true;
         private boolean albumVisible = true;
         private boolean genreVisible;
@@ -391,6 +401,14 @@ public class UserSettings {
 
         public void setTrackNumberVisible(boolean trackNumberVisible) {
             this.trackNumberVisible = trackNumberVisible;
+        }
+
+        public boolean getDiscNumberVisible() {
+            return discNumberVisible;
+        }
+
+        public void setDiscNumberVisible(boolean discNumberVisible) {
+            this.discNumberVisible = discNumberVisible;
         }
 
         public boolean getArtistVisible() {
